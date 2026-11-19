@@ -1,0 +1,11 @@
+# dati dei punti salvati dal server (privati: posizioni delle tartufaie)
+data/
+
+node_modules/
+.env
+*.log
+.DS_Store
+Thumbs.db
+
+# impostazioni locali di Claude Code
+.claude/settings.local.json

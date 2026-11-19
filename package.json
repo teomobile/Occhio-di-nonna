@@ -1,0 +1,13 @@
+{
+  "name": "occhio-di-nonna",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Webapp (PWA) per segnare i punti di ritrovamento dei tartufi, con mappe offline e sincronizzazione.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

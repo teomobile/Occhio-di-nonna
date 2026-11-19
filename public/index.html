@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1814">
+  <meta name="description" content="Segna e ritrova i tuoi punti di tartufi, anche senza rete.">
+  <title>Occhio di nonna</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="map" aria-label="Mappa"></div>
+
+  <header class="topbar">
+    <button id="seasonChip" class="chip-season" type="button" aria-label="Calendario di raccolta"></button>
+    <button id="syncPill" class="pill" type="button" aria-label="Stato sincronizzazione">
+      <span class="dot"></span><span class="txt">…</span>
+    </button>
+  </header>
+
+  <div class="side-controls">
+    <button id="btnLayers" class="ctrl" type="button" aria-label="Tipo di mappa"></button>
+    <button id="btnLocate" class="ctrl" type="button" aria-label="Centra sulla mia posizione"></button>
+    <button id="btnMenu" class="ctrl" type="button" aria-label="Mappe offline, sincronizzazione e backup"></button>
+  </div>
+
+  <p id="hint" class="hint">Tocca la mappa per segnare un punto</p>
+
+  <nav class="bottombar">
+    <button id="btnList" class="btn btn-secondary big" type="button">
+      <span class="ico" data-icon="star"></span> Preferiti <span id="countBadge" class="badge">0</span>
+    </button>
+    <button id="btnSaveHere" class="btn btn-primary big" type="button">
+      <span class="ico" data-icon="pin"></span> Salva qui
+    </button>
+  </nav>
+
+  <section id="navPanel" class="nav-panel" hidden aria-live="polite">
+    <div class="nav-arrow-wrap"><svg id="navArrow" class="nav-arrow" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6 L78 86 L50 70 L22 86 Z"/></svg></div>
+    <div class="nav-info">
+      <div id="navDist" class="nav-dist">—</div>
+      <div id="navName" class="nav-name"></div>
+      <div id="navNote" class="nav-note"></div>
+    </div>
+    <button id="navStop" class="btn btn-ghost" type="button">Termina</button>
+  </section>
+
+  <div id="sheetBackdrop" class="backdrop" hidden></div>
+  <section id="sheet" class="sheet" hidden role="dialog" aria-modal="true">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <div id="sheetBody" class="sheet-body"></div>
+  </section>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

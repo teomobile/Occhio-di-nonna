@@ -1,0 +1,16 @@
+{
+  "name": "Occhio di nonna",
+  "short_name": "Occhio di nonna",
+  "description": "Segna e ritrova i tuoi punti di tartufi, anche senza rete.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b1814",
+  "theme_color": "#1b1814",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
