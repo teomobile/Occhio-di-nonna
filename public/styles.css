@@ -77,6 +77,7 @@ button { cursor: pointer; }
 .legend { padding: 0 0 8px 34px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .legend-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .legend-row img { max-width: 100%; background: #fff; border-radius: 4px; }
+.notice.warn { background: rgba(226, 103, 79, .12); border-color: rgba(226, 103, 79, .45); }
 .compare-toggle { background: rgba(224, 169, 59, .1); border: 1px solid rgba(224, 169, 59, .35); border-radius: 12px; padding: 10px 12px !important; margin: 8px 0 !important; }
 
 /* Confronto a tendina */

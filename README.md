@@ -25,10 +25,11 @@ Poi in Chrome: menu ⋮ → **Aggiungi a schermata Home / Installa app**.
 - Data e ora salvate in automatico; tipo di tartufo, peso, cane, note e foto sono facoltativi.
 - Avviso se entro 30 m hai già trovato tartufi (anche anni precedenti).
 - **Portami qui**: freccia con bussola e distanza per tornare al punto, schermo sempre acceso.
-- **Calendario regionale automatico**: l'app riconosce Regione e Provincia (anche offline, dai confini in `public/province.json`) e mostra cosa è in stagione lì. Calendari inseriti: Piemonte, Toscana, Lombardia (con le date diverse di Pavia e Mantova), Veneto, Trentino; altrove date nazionali indicative. Si può anche scegliere la zona a mano.
+- **Calendario regionale automatico**: l'app riconosce Regione e Provincia (anche offline, dai confini in `public/province.json`) e mostra cosa è in stagione lì. Calendari di 16 Regioni più il Trentino (vedi HANDOFF.md per le fonti; alcune sono segnate "da verificare"); altrove date nazionali indicative. Si può anche scegliere la zona a mano.
 - **Strati** (pulsante in alto a destra): foto aeree storiche (Italia 1988, Toscana 1954, Lombardia 1954) e carte delle zone vocate ai tartufi (Piemonte, Lombardia, Veneto) con legenda. Passano dal server (`/ov/...`) e si possono scaricare per l'uso offline.
 - **Confronto a tendina**: foto storica a sinistra, satellite di oggi a destra, separati da una barra da trascinare.
-- **Vecchi campi (Toscana)**: boschi di oggi nati su terreni che nel 1954 erano coltivati (carta ufficiale dell'uso del suolo 1954→2019).
+- **Vecchi campi**: boschi di oggi nati su terreni un tempo coltivati. Toscana 1954→2019 (carta regionale), Lombardia 1980→2015 e Italia 1990→2018 (Corine), calcolati dall'app incrociando due carte.
+- **Suolo e geologia**: rocce calcaree e marnose (ISPRA, carta litologica 1:100.000) e pH del suolo (SoilGrids).
 - **Mappe offline**: satellite, topografica, stradale. Scarica la zona visibile; le zone già viste restano in cache.
 - **Sincronizzazione**: tutto si salva prima sul telefono (IndexedDB); i punti in attesa partono da soli appena torna la rete.
 - Backup: esporta **GPX** (app GPS, Google Earth) e backup JSON con note e foto; importa backup.

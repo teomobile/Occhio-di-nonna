@@ -1,5 +1,5 @@
 // Service worker: app utilizzabile offline + tessere della mappa in cache.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const APP_CACHE = `tartufi-app-${VERSION}`;
 const TILE_CACHE = 'tartufi-tiles'; // stesso nome usato in offline.js
 const TILE_HOSTS = ['server.arcgisonline.com', 'a.tile.opentopomap.org', 'tile.openstreetmap.org'];

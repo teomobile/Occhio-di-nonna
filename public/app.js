@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { syncNow, onSyncStatus, getSyncConfig, setSyncConfig, refreshStatus } from './sync.js';
 import { TYPES, DARK_TYPES, CALENDARS, typeById, inSeason, seasonLabel, monthActive, MONTH_INITIALS, calendarKey, zoneLabel, periodsFor } from './seasons.js';
-import { BASEMAPS, OVERLAYS, OVERLAY_MIN_ZOOM, OVERLAY_MAX_NATIVE, overlayUrl, overlayAsBasemap, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
+import { BASEMAPS, OVERLAYS, OVERLAY_MIN_ZOOM, OVERLAY_MAX_NATIVE, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
 import { loadZones, zoneAt } from './zones.js';
 
 /* ================= Utilità ================= */
@@ -109,12 +109,65 @@ const compare = { on: false, x: 0.5, el: null }; // stato del confronto a tendin
 let activeOverlays = pref.get('overlays', []).filter(id => OVERLAYS.some(o => o.id === id));
 const overlayOpacity = () => pref.get('overlayOpacity', null);
 
+/*
+ * Strato calcolato: per ogni tessera scarica due carte (come immagini dallo stesso server, quindi leggibili)
+ * e colora solo i pixel presenti in entrambe: "agricolo allora" ∩ "bosco oggi" = vecchi campi.
+ * Se la carta di oggi non si può filtrare (DUSAF), il bosco si riconosce dai colori della legenda (nowColors).
+ */
+const IntersectLayer = L.GridLayer.extend({
+  createTile(coords, done) {
+    const tile = document.createElement('canvas');
+    const { x: w, y: h } = this.getTileSize();
+    tile.width = w;
+    tile.height = h;
+    const { spec, color } = this.options;
+    const load = id => new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = `ov/${id}/${coords.z}/${coords.x}/${coords.y}`;
+    });
+    const pixels = img => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      return ctx.getImageData(0, 0, w, h).data;
+    };
+    const near = (d, i, cols) => cols.some(([r, g, b]) => Math.abs(d[i] - r) + Math.abs(d[i + 1] - g) + Math.abs(d[i + 2] - b) < 36);
+    const [cr, cg, cb] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+    Promise.all([load(spec.past), load(spec.now)]).then(([pastImg, nowImg]) => {
+      const past = pixels(pastImg), now = pixels(nowImg);
+      const ctx = tile.getContext('2d');
+      const out = ctx.createImageData(w, h);
+      for (let i = 0; i < past.length; i += 4) {
+        if (past[i + 3] > 60 && now[i + 3] > 60 && (!spec.nowColors || near(now, i, spec.nowColors))) {
+          out.data[i] = cr; out.data[i + 1] = cg; out.data[i + 2] = cb; out.data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      done(null, tile);
+    }).catch(err => done(err, tile));
+    return tile;
+  },
+});
+
 function overlayLayer(o) {
   if (!overlayLayers[o.id]) {
-    overlayLayers[o.id] = L.tileLayer(overlayUrl(o.id), {
-      minZoom: OVERLAY_MIN_ZOOM, maxZoom: 20, maxNativeZoom: OVERLAY_MAX_NATIVE,
+    const opts = {
+      minZoom: o.minZoom || OVERLAY_MIN_ZOOM, maxZoom: 20, maxNativeZoom: OVERLAY_MAX_NATIVE,
       opacity: overlayOpacity() ?? o.opacity, attribution: o.source,
       pane: isPhoto(o) ? 'photoPane' : 'zonePane',
+    };
+    overlayLayers[o.id] = o.intersect
+      ? new IntersectLayer({ ...opts, spec: o.intersect, color: o.color })
+      : L.tileLayer(overlayUrl(o.id), opts);
+    // i geoportali lenti (es. SoilGrids) a volte non rispondono in tempo: riprovo una volta
+    overlayLayers[o.id].on('tileerror', ({ tile }) => {
+      if (tile.tagName !== 'IMG' || tile.dataset.retry) return;
+      tile.dataset.retry = '1';
+      setTimeout(() => { tile.src = `${tile.src}${tile.src.includes('?') ? '&' : '?'}retry=1`; }, 2000);
     });
   }
   return overlayLayers[o.id];
@@ -134,9 +187,12 @@ activeOverlays.forEach(id => setOverlay(id, true));
 
 const GROUP_HINTS = {
   'Foto aeree storiche': 'Confronta con il satellite di oggi: i boschi nati su vecchi campi e pascoli si riconoscono bene.',
-  'Vecchi campi': 'Il confronto già fatto dalla Regione sulle carte dell’uso del suolo: dove oggi c’è bosco ma un tempo si coltivava.',
+  'Vecchi campi': 'Dove oggi c’è bosco ma un tempo si coltivava: confronto tra carte ufficiali dell’uso del suolo di due date.',
   'Zone vocate ai tartufi': 'Carte ufficiali delle Regioni sulla vocazione dei terreni. Indicano dove è probabile trovare tartufi, non dove ci sono.',
+  'Suolo e geologia': 'Rocce madri e pH del suolo: i tartufi pregiati preferiscono terreni calcarei, marnosi e sub-alcalini.',
 };
+const overlayById = id => OVERLAYS.find(o => o.id === id);
+const minZoomOf = id => overlayById(id)?.minZoom || OVERLAY_MIN_ZOOM;
 
 /* ----- Confronto a tendina: foto storiche a sinistra, mappa di oggi a destra ----- */
 
@@ -199,6 +255,8 @@ function buildDivider() {
 }
 
 async function legendHtml(id) {
+  const static_ = overlayById(id)?.legendItems;
+  if (static_) return static_.map(i => `<div class="legend-row"><i class="swatch" style="--c:${i.color};border-radius:3px"></i><span>${esc(i.label)}</span></div>`).join('');
   try {
     const items = await fetch(`ov/${id}/legend`).then(r => (r.ok ? r.json() : []));
     return items.map(i => `<div class="legend-row"><img src="${i.img}" alt="">${i.label ? `<span>${esc(i.label)}</span>` : ''}</div>`).join('');
@@ -224,12 +282,12 @@ function openLayers() {
           <label class="overlay-item"><input type="checkbox" data-ov="${o.id}" ${activeOverlays.includes(o.id) ? 'checked' : ''}>
             <span><b>${esc(o.name)}</b>${o.region && o.region === regionOf ? ' <span class="leaf">● sei qui</span>' : ''}<br><span class="muted">${esc(o.source)}</span>
             ${o.hint ? `<br><span class="muted">${esc(o.hint)}</span>` : ''}</span></label>
-          ${o.legend ? `<div class="legend" id="lg-${o.id}" ${activeOverlays.includes(o.id) ? '' : 'hidden'}></div>` : ''}
+          ${o.legend || o.legendItems ? `<div class="legend" id="lg-${o.id}" ${activeOverlays.includes(o.id) ? '' : 'hidden'}></div>` : ''}
         </li>`).join('')}</ul>`).join('')}
     <label>Trasparenza strati<input id="lyOpacity" type="range" min="0.2" max="1" step="0.1" value="${op ?? 0.7}"></label>
     <p class="muted">Gli strati si vedono da zoom ${OVERLAY_MIN_ZOOM} in su e servono la rete (o una zona scaricata per l'uso offline). Alcuni geoportali possono essere lenti.</p>`);
 
-  if (map.getZoom() < OVERLAY_MIN_ZOOM && activeOverlays.length) toast('Avvicinati con lo zoom per vedere gli strati');
+  if (activeOverlays.some(id => map.getZoom() < minZoomOf(id))) toast('Avvicinati con lo zoom per vedere gli strati');
   const fillLegend = async id => {
     const el = document.getElementById(`lg-${id}`);
     if (el && !el.dataset.done) { el.dataset.done = 1; el.innerHTML = (await legendHtml(id)) || '<span class="muted">Legenda non disponibile</span>'; }
@@ -245,7 +303,7 @@ function openLayers() {
     setOverlay(cb.dataset.ov, cb.checked);
     const lg = document.getElementById(`lg-${cb.dataset.ov}`);
     if (lg) { lg.hidden = !cb.checked; if (cb.checked) fillLegend(cb.dataset.ov); }
-    if (cb.checked && map.getZoom() < OVERLAY_MIN_ZOOM) toast('Avvicinati con lo zoom per vedere lo strato');
+    if (cb.checked && map.getZoom() < minZoomOf(cb.dataset.ov)) toast(`Avvicinati con lo zoom (almeno ${minZoomOf(cb.dataset.ov)}) per vedere lo strato`);
   }));
   $('#lyOpacity').addEventListener('input', e => {
     const v = Number(e.target.value);
@@ -673,10 +731,11 @@ function openCalendar() {
     <label>Zona
       <select id="calZone">
         <option value="">Automatica – ${esc(zoneLabel(state.zone))}${state.zone?.province ? ` (${esc(state.zone.province)})` : ''}</option>
-        ${Object.entries(CALENDARS).map(([k, c]) => `<option value="${k}" ${override === k ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+        ${Object.entries(CALENDARS).sort((a, b) => (a[0] === 'nazionale') - (b[0] === 'nazionale') || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `<option value="${k}" ${override === k ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
       </select>
     </label>
     <p class="muted" style="margin-top:10px"><b>${esc(cal.name)}${ctx.province ? ` – provincia di ${esc(ctx.province)}` : ''}</b> · ${esc(cal.source)}</p>
+    ${cal.check ? '<div class="notice warn"><b>Da verificare:</b> non ho trovato il testo ufficiale aggiornato, oppure le date cambiano ogni anno per decreto.</div>' : ''}
     ${cal.note ? `<div class="notice">${esc(cal.note)}</div>` : ''}
     ${provinceNote}
     ${!override && autoKey === 'nazionale' && state.zone ? `<p class="muted">Per ${esc(zoneLabel(state.zone))} non ho ancora il calendario regionale: sono mostrate date nazionali indicative.</p>` : ''}
@@ -826,7 +885,9 @@ async function openMenu() {
     const urls = tileUrls(b, map.getBounds(), Math.max(1, z - 2), zMax);
     if ($('#oOverlays')?.checked) {
       for (const id of activeOverlays) {
-        urls.push(...tileUrls(overlayAsBasemap(id), map.getBounds(), Math.max(OVERLAY_MIN_ZOOM, z - 2), zMax));
+        for (const src of overlaySources(overlayById(id))) { // gli strati calcolati richiedono due carte
+          urls.push(...tileUrls(overlayAsBasemap(src), map.getBounds(), Math.max(minZoomOf(id), z - 2), zMax));
+        }
       }
     }
     const tooMany = urls.length > MAX_TILES;

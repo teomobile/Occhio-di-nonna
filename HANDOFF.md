@@ -22,10 +22,12 @@ Webapp PWA per Android: segni sulla mappa dove trovi i tartufi, li salvi con dat
 | "Portami qui" (bussola + distanza) | ✅ fatto | Bussola non provata su un telefono vero |
 | Mappe offline (satellite, topo, stradale) | ✅ fatto, testato | Limite di 4000 tessere per download |
 | Coda di sincronizzazione offline → server | ✅ fatto, testato | Testato spegnendo e riaccendendo il server |
-| Calendario per Regione/Provincia (automatico) | ✅ fatto, testato | Piemonte, Toscana, Lombardia (+Pavia/Mantova), Veneto, Trentino |
+| Calendario per Regione/Provincia (automatico) | ✅ fatto, testato | 16 Regioni + Trentino; vedi §5 per l'affidabilità di ciascuna |
 | Strati: foto storiche + zone vocate | ✅ fatto, testato | Passano dal proxy `/ov/` del server |
 | Confronto a tendina (foto storica ↔ oggi) | ✅ fatto, testato | Pannello Leaflet `photoPane` ritagliato con `clip`; si attiva da Mappe e strati |
 | Strato "boschi nati su ex campi" Toscana | ✅ fatto, testato | Arancione = agricolo nel 1954, bosco nel 2019 |
+| "Vecchi campi" calcolati: Lombardia 1980→2015, Italia Corine 1990→2018 | ✅ fatto, testato | `IntersectLayer` in app.js incrocia due carte pixel per pixel nel browser |
+| Suolo e geologia: rocce calcaree/marnose (ISPRA), pH (SoilGrids) | ✅ fatto, testato | pH lento (15–20 s/tessera), con un nuovo tentativo automatico |
 | Backup GPX / JSON, import | ✅ fatto | Import non testato a fondo |
 | Prova su telefono Android reale | ❌ da fare | Serve HTTPS |
 | Messa online (hosting HTTPS) | ❌ da fare | |
@@ -87,9 +89,22 @@ public/
 | Lombardia | D.d.s. 18/03/2026 n. 3516 (stagione 2026–27), con date diverse per Pavia e Mantova |
 | Veneto | L.R. 30/1988 art. 8, tabella regionale aggiornata a settembre 2024 |
 | Trentino | Servizio Foreste PAT, L.P. 11/2007 (solo 5 specie ammesse) |
-| Altre zone | L. 752/1985: date **indicative**, non verificate per Regione |
+| Emilia-Romagna | Calendario 2026–2030, DGR 137/2026 (PDF ufficiale) |
+| Marche | L.R. 5/2013 all. A, sostituito da L.R. 17/2024 (testo vigente Consiglio regionale) |
+| Umbria | L.R. 12/2015 art. 110 (date "ultima domenica" calcolate: giorno `-1` in `seasons.js`) |
+| Abruzzo | L.R. 66/2012 art. 2, testo aggiornato n. 8 (dichiarato vigente fino al 19/11/2025: controllare se c'è un n. 9) |
+| Friuli Venezia Giulia | L.R. 23/1999 art. 11, testo vigente dal 27/10/2024 |
+| Lazio | L.R. 82/1988 art. 4 (PDF sul sito della Regione) |
+| Campania | Reg. reg. 3/2007 art. 8, testo vigente |
+| Puglia | L.R. 8/2015 art. 15 (Bussola normativa del Consiglio) |
+| Basilicata | L.R. 35/1995 all. A, pagina ufficiale della Regione; cambi annuali per DGR |
+| Liguria ⚠️ | L.R. 2/2022 + decreto 2024–25 (temporaneo); nuovo decreto 2025 non letto |
+| Molise ⚠️ | L.R. 24/2005 art. 8 (testo 2006 in G.U.) + modifica 2011 da fonte non ufficiale |
+| Sicilia ⚠️ | L.R. 35/2020, calendario dal sito della Regione (2022); bianco da stampa; nero pregiato non trovato |
+| Calabria, Sardegna, Valle d'Aosta, Alto Adige | Date nazionali indicative. Calabria: trovata solo una proposta di legge. Sardegna: L.R. 10/2023, calendario non trovato |
 
-⚠️ La Lombardia rinnova il calendario ogni anno entro il 31 marzo: va ricontrollato ogni primavera.
+⚠️ = `check: 'da verificare'` in `seasons.js`; l'app lo mostra con un avviso rosso.
+⚠️ La Lombardia rinnova il calendario ogni anno entro il 31 marzo, la Basilicata e la Liguria cambiano spesso per decreto: vanno ricontrollate ogni stagione.
 
 ### Strati (`server.js` → `OVERLAYS`)
 
@@ -102,6 +117,13 @@ public/
 | pie-bianco / pie-nero / pie-scorzone | WMS CSI Piemonte `wms_vocazione_tartufigena_2025` | |
 | lom-vocazione / lom-riservate | ArcGIS REST `agricoltura/agr_tartufi`, `aree_funghi_tartufi` | |
 | ven-<specie> | GeoServer Regione Veneto `rv:<specie>_vocazionalita` | 9 specie |
+| lom-agri1980 | ArcGIS `opendata/suolo1980`, layer 2, filtro `CODICE LIKE '2%'` | Sorgente per lom-ex-campi |
+| lom-dusaf2015 | ArcGIS `BaseMap/DUSAF2015` | Non accetta filtri né query: i boschi si riconoscono dal colore (121,242,56) e arbusteti (164,255,115). Lento: ~20 s alla prima richiesta |
+| corine-agri1990 / corine-bosco2018 | EEA `image.discomap.eea.europa.eu` Corine `CLC1990_WM` / `CLC2018_WM`, layer 0 vettoriale con `layerDefs` | Il vettoriale esiste solo sotto 1:250.000 → strato da zoom 11 |
+| geo-litologia | GeoServer ISPRA `ge-core8` `litologia100k` + SLD nostro (`LITO_SLD` in server.js) | Stile di default inutile (tutto grigio). Salti netti tra fogli 1:100k |
+| soil-ph | ISRIC SoilGrids `phh2o_0-5cm_mean` | Valori in pH×10; 15–20 s per tessera |
+
+Strati calcolati nell'app (`intersect` in `offline.js`): `lom-ex-campi` (lom-agri1980 × lom-dusaf2015) e `it-corine-ex-campi` (corine-agri1990 × corine-bosco2018).
 
 **Scartati:**
 - PCN 1994: il servizio era giù.
@@ -119,7 +141,8 @@ public/
 - **Le date di raccolta solo da fonti ufficiali verificate**, mai a memoria.
 - **Zona automatica**: si usa il GPS se è recente e visibile sulla mappa, altrimenti il centro della mappa.
 - **Nome: "Occhio di nonna".** I nomi interni restano `tartufi` (IndexedDB, prefisso localStorage, cache del service worker) per non perdere i dati già salvati.
-- **"Vecchi campi"**: non si analizzano le foto pixel per pixel (inaffidabile sul b/n del 1954). Si usano le carte ufficiali dell'uso del suolo di due date.
+- **"Vecchi campi"**: non si analizzano le foto pixel per pixel (inaffidabile sul b/n del 1954). Si usano le carte ufficiali dell'uso del suolo di due date; l'incrocio si fa nel browser (canvas), non sul server, così le tessere di partenza restano in cache per l'offline.
+- **Calendari incerti**: si mostrano comunque, con l'avviso "da verificare", invece di nasconderli.
 
 ## 7. Decisioni aperte
 
@@ -130,13 +153,12 @@ public/
 
 1. Mettere online in HTTPS e provare su un Android vero: GPS, bussola, tendina col dito, installazione, offline in un bosco.
 2. Icone PNG 192/512 (per l'installazione su Android sono più affidabili dell'SVG).
-3. "Vecchi campi" in Lombardia: incrociare Uso del suolo 1980 (`agricoltura/Uso_suolo_1980` o `opendata/suolo1980`) con DUSAF recente (`opendata/dusaf*`) sul server ArcGIS della Regione.
+3. Verificare i calendari segnati ⚠️ (Liguria, Molise, Sicilia) e cercare Sardegna (L.R. 10/2023) e Calabria.
 4. Idee raccolte, non ancora fatte:
    - blocco con PIN o "modalità discreta";
    - storico dei ritrovamenti per tartufaia (più ritrovamenti nello stesso punto);
-   - carte dei suoli/geologiche (pH, calcare);
-   - Corine Land Cover 1990→2018 per i campi abbandonati;
-   - calendari di altre Regioni.
+   - carte regionali dei suoli con pH e carbonati misurati (non trovate come servizio WMS; ERSAF, IPLA, ARPAV hanno i dati);
+   - "vecchi campi" in Veneto con la Carta di copertura del suolo regionale (`rv:c0506171_ccs2021` sul GeoServer Veneto).
 
 ## 9. Diario delle sessioni
 
@@ -148,6 +170,11 @@ public/
   - App rinominata "Occhio di nonna".
   - Aggiunti il confronto a tendina tra foto storica e satellite e lo strato Toscana "boschi nati su ex campi (1954→2019)".
   - Creato il repository git e pubblicato `main` su GitHub (teomobile/Occhio-di-nonna).
+- **19/11/2026 – sessione 2**
+  - Strati "vecchi campi" calcolati: Lombardia (uso del suolo 1980 × DUSAF 2015) e Italia (Corine 1990 × 2018).
+  - Nuovo gruppo "Suolo e geologia": rocce calcaree e marnose (ISPRA) e pH del suolo (SoilGrids).
+  - Calendari aggiunti per 12 Regioni (9 da testi ufficiali, 3 da verificare); supporto alle date "ultima domenica del mese".
+  - Testato nel browser a misura di telefono (Bergamo, Perugia).
 
 ---
 

@@ -34,6 +34,21 @@ export const OVERLAYS = [
   { id: 'lom-1954',     group: 'Foto aeree storiche', name: 'Lombardia 1954 (volo GAI)', region: 'Lombardia', opacity: 1, source: 'Regione Lombardia – Geoportale' },
   { id: 'tos-boschi-ex-campi', group: 'Vecchi campi', name: 'Toscana – boschi nati su ex campi (1954→2019)', region: 'Toscana', opacity: 0.7, legend: true,
     source: 'Regione Toscana – Uso del suolo 2019-1954', hint: 'Arancione: nel 1954 era terreno agricolo, oggi è bosco. Verde: bosco già nel 1954.' },
+  // Calcolati nell'app incrociando due carte: dove ieri si coltivava e oggi c'è bosco o arbusteto
+  { id: 'lom-ex-campi', group: 'Vecchi campi', name: 'Lombardia – boschi nati su ex campi (1980→2015)', region: 'Lombardia', opacity: 0.8,
+    intersect: { past: 'lom-agri1980', now: 'lom-dusaf2015', nowColors: [[121, 242, 56], [164, 255, 115]] }, color: '#ff8c1a',
+    legendItems: [{ color: '#ff8c1a', label: 'Agricolo nel 1980, bosco o arbusteto nel 2015' }],
+    source: 'Calcolato da Regione Lombardia: Uso del suolo 1980 × DUSAF 2015', hint: 'Dettaglio buono (carte regionali), visibile da zoom 12.', minZoom: 12 },
+  { id: 'it-corine-ex-campi', group: 'Vecchi campi', name: 'Italia – campi diventati bosco (1990→2018)', region: null, opacity: 0.75,
+    intersect: { past: 'corine-agri1990', now: 'corine-bosco2018' }, color: '#e8590c',
+    legendItems: [{ color: '#e8590c', label: 'Agricolo nel 1990, bosco o vegetazione naturale nel 2018' }],
+    source: 'Calcolato da Corine Land Cover 1990 × 2018 (Copernicus/EEA)', hint: 'Grossolano: aree minime di 25 ettari. Indica le zone, non i singoli campi. Visibile da zoom 11.', minZoom: 11 },
+
+  { id: 'geo-litologia', group: 'Suolo e geologia', name: 'Rocce calcaree e marnose', region: null, opacity: 0.55,
+    legendItems: [{ color: '#2f7de1', label: 'Calcari e dolomie' }, { color: '#9b59d0', label: 'Marne' }],
+    source: 'ISPRA – Carta litologica d’Italia 1:100.000', hint: 'Substrati calcarei e marnosi, i preferiti da molti tartufi. Ai bordi tra fogli possono esserci salti netti.' },
+  { id: 'soil-ph', group: 'Suolo e geologia', name: 'pH del suolo (0–5 cm)', region: null, opacity: 0.6, legend: true,
+    source: 'ISRIC SoilGrids 250 m (CC-BY 4.0)', hint: 'Stima da modello, risoluzione 250 m. Il tartufo bianco e il nero amano suoli sub-alcalini (pH 7–8,5). Può essere lento a caricare.' },
   { id: 'pie-bianco',  group: 'Zone vocate ai tartufi', name: 'Piemonte – bianco',    region: 'Piemonte', opacity: 0.6, legend: true, source: 'Regione Piemonte / IPLA, ed. 2025' },
   { id: 'pie-nero',     group: 'Zone vocate ai tartufi', name: 'Piemonte – nero',      region: 'Piemonte', opacity: 0.6, legend: true, source: 'Regione Piemonte / IPLA, ed. 2025' },
   { id: 'pie-scorzone', group: 'Zone vocate ai tartufi', name: 'Piemonte – scorzone',  region: 'Piemonte', opacity: 0.6, legend: true, source: 'Regione Piemonte / IPLA, ed. 2025' },
@@ -52,6 +67,8 @@ export const OVERLAYS = [
 export const OVERLAY_MIN_ZOOM = 9;
 export const OVERLAY_MAX_NATIVE = 18;
 export const overlayUrl = id => `ov/${id}/{z}/{x}/{y}`;
+// Tessere da scaricare per un overlay: per quelli calcolati servono entrambe le carte di partenza
+export const overlaySources = o => (o.intersect ? [o.intersect.past, o.intersect.now] : [o.id]);
 export const overlayAsBasemap = id => ({ url: new URL(overlayUrl(id), location.href).href.replace(/%7B/g, '{').replace(/%7D/g, '}'), maxNativeZoom: OVERLAY_MAX_NATIVE, kbPerTile: 30 });
 
 const lon2x =(lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
