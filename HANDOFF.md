@@ -29,7 +29,7 @@ Webapp PWA per Android: segni sulla mappa dove trovi i tartufi, li salvi con dat
 | Backup GPX / JSON, import | ✅ fatto | Import non testato a fondo |
 | Prova su telefono Android reale | ❌ da fare | Serve HTTPS |
 | Messa online (hosting HTTPS) | ❌ da fare | |
-| Repository git | ✅ creato in locale | Vedi il diario: verificare se il push su GitHub è stato fatto |
+| Repository git | ✅ su GitHub | `main` pubblicato su teomobile/Occhio-di-nonna |
 
 ## 3. Come si avvia
 
@@ -147,7 +147,7 @@ public/
 - **19/11/2026 – sessione 1 (continua)**
   - App rinominata "Occhio di nonna".
   - Aggiunti il confronto a tendina tra foto storica e satellite e lo strato Toscana "boschi nati su ex campi (1954→2019)".
-  - Creato il repository git locale con primo commit; remote `origin` impostato su GitHub.
+  - Creato il repository git e pubblicato `main` su GitHub (teomobile/Occhio-di-nonna).
 
 ---
 
