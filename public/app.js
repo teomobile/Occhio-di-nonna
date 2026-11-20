@@ -50,6 +50,7 @@ $('#btnTrails').innerHTML = icon('trail');
 $('#btnMenu').innerHTML = icon('menu');
 
 let toastTimer;
+let syncOn = false;
 function toast(msg, ms = 2600) {
   const t = $('#toast');
   t.textContent = msg;
@@ -647,7 +648,7 @@ function openDetail(id) {
   const dist = state.me ? fmtDist(distance(state.me, f)) : null;
   openSheet(`
     <div class="sheet-head"><h2><i class="swatch" style="--c:${t.color};display:inline-block;margin-right:6px"></i>${esc(t.name)}</h2>${closeBtn}</div>
-    <div class="meta-row"><span>${fmtDateTime(f.createdAt)}</span>${dist ? `<span>a ${dist} da te</span>` : ''}${f.synced ? '' : '<span class="unsynced">● da sincronizzare</span>'}</div>
+    <div class="meta-row"><span>${fmtDateTime(f.createdAt)}</span>${dist ? `<span>a ${dist} da te</span>` : ''}${f.synced || !syncOn ? '' : '<span class="unsynced">● da sincronizzare</span>'}</div>
     ${f.photo ? `<img class="detail-photo" src="${f.photo}" alt="Foto del ritrovamento">` : ''}
     <dl class="kv">
       <dt>Coordinate</dt><dd><button class="link" id="dCopy" type="button">${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}</button> ${f.accuracy != null ? `<span class="muted">±${Math.round(f.accuracy)} m</span>` : ''}</dd>
@@ -731,7 +732,7 @@ function renderList() {
     const sub = [f.weight != null ? fmtWeight(f.weight) : '', f.dog, f.notes].filter(Boolean).join(' · ');
     return `<li><button class="find-item" type="button" data-id="${f.id}">
       <i class="swatch" style="--c:${t.color}"></i>
-      <span><span class="t">${esc(t.name)}</span>${f.synced ? '' : ' <span class="unsynced">●</span>'}<br><span class="s">${esc(sub) || '<span class="muted">nessuna nota</span>'}</span></span>
+      <span><span class="t">${esc(t.name)}</span>${f.synced || !syncOn ? '' : ' <span class="unsynced">●</span>'}<br><span class="s">${esc(sub) || '<span class="muted">nessuna nota</span>'}</span></span>
       <span class="d">${fmtDay(f.createdAt)}${state.me ? `<br>${fmtDist(distance(state.me, f))}` : ''}</span>
     </button></li>`;
   }).join('') : `<li class="empty">${state.finds.length ? 'Nessun punto con questi filtri.' : 'Nessun punto salvato.<br>Usa “Salva qui” o tocca la mappa.'}</li>`;
@@ -982,13 +983,17 @@ async function openMenu() {
     <button class="link" id="oClear" type="button">Elimina mappe offline</button>
 
     <h3>Sincronizzazione</h3>
-    <p class="muted">I punti sono sempre salvati prima sul telefono. Quando torni online vengono inviati al server in automatico.</p>
+    <label class="overlay-item"><input type="checkbox" id="sEnabled" ${cfg.enabled ? 'checked' : ''}>
+      <span><b>Sincronizza con un server</b><br><span class="muted">Spenta: i punti restano solo su questo telefono. Ricordati di esportare ogni tanto un backup.</span></span></label>
     <p id="sStatus"></p>
-    <label>Indirizzo server<input id="sUrl" type="url" inputmode="url" placeholder="vuoto = solo su questo telefono" value="${esc(cfg.url)}"></label>
-    <label>Token (facoltativo)<input id="sToken" type="password" autocomplete="off" value="${esc(cfg.token)}"></label>
-    <div class="btn-row">
-      <button class="btn btn-ghost" id="sSave" type="button">Salva impostazioni</button>
-      <button class="btn btn-primary" id="sNow" type="button">Sincronizza ora</button>
+    <div id="sServer" ${cfg.enabled ? '' : 'hidden'}>
+      <p class="muted">I punti sono sempre salvati prima sul telefono. Quando torni online vengono inviati al server in automatico.</p>
+      <label>Indirizzo server<input id="sUrl" type="url" inputmode="url" value="${esc(cfg.url)}"></label>
+      <label>Token (facoltativo)<input id="sToken" type="password" autocomplete="off" value="${esc(cfg.token)}"></label>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="sSave" type="button">Salva impostazioni</button>
+        <button class="btn btn-primary" id="sNow" type="button">Sincronizza ora</button>
+      </div>
     </div>
 
     <h3>Backup</h3>
@@ -1056,8 +1061,15 @@ async function openMenu() {
   });
 
   $('#sStatus').textContent = statusText(status, true);
+  $('#sEnabled').addEventListener('change', async e => {
+    const on = e.target.checked;
+    $('#sServer').hidden = !on;
+    await setSyncConfig({ enabled: on, url: $('#sUrl').value, token: $('#sToken').value });
+    toast(on ? 'Sincronizzazione accesa' : 'Sincronizzazione spenta: i punti restano sul telefono');
+    if (on) syncNow().then(r => r?.changed && loadFinds()); else refreshStatus();
+  });
   $('#sSave').addEventListener('click', async () => {
-    await setSyncConfig({ url: $('#sUrl').value, token: $('#sToken').value });
+    await setSyncConfig({ enabled: true, url: $('#sUrl').value, token: $('#sToken').value });
     // i punti già inviati al vecchio server vanno reinviati al nuovo
     const all = await db.all();
     await db.putMany(all.map(f => ({ ...f, synced: false })));
@@ -1149,7 +1161,7 @@ function statusText(s, long = false) {
   const p = s.pending;
   switch (s.state) {
     case 'syncing': return 'Sincronizzo…';
-    case 'local': return long ? 'Sincronizzazione disattivata: i punti restano solo su questo telefono.' : (p ? 'Solo sul telefono' : 'Salvato sul telefono');
+    case 'local': return long ? 'Sincronizzazione spenta: i punti restano solo su questo telefono.' : 'Sul telefono';
     case 'offline': return p ? `Offline · ${p} in attesa` : 'Offline';
     case 'error':
       if (long) return `Server non raggiungibile (${s.error}). ${p ? `${p} punti in attesa: ` : ''}riprovo da solo.`;
@@ -1161,6 +1173,7 @@ function statusText(s, long = false) {
 onSyncStatus(s => {
   const pill = $('#syncPill');
   pill.dataset.state = s.state;
+  syncOn = s.state !== 'local'; // a sincronizzazione spenta non mostro i pallini "da sincronizzare"
   pill.querySelector('.txt').textContent = statusText(s);
   const el = document.getElementById('sStatus'); // pannello impostazioni, se aperto
   if (el) el.textContent = statusText(s, true);

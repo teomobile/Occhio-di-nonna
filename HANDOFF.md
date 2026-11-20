@@ -184,6 +184,7 @@ Strati calcolati nell'app (`intersect` in `offline.js`): `lom-ex-campi` (lom-agr
   - Calendari aggiunti per 12 Regioni (9 da testi ufficiali, 3 da verificare); supporto alle date "ultima domenica del mese".
   - Testato nel browser a misura di telefono (Bergamo, Perugia).
 - **20/11/2026 – sessione 3 (continua)**
+  - **Sincronizzazione spenta di base** (per ora i punti restano solo sul telefono). Interruttore "Sincronizza con un server" nelle Impostazioni; indirizzo e token restano salvati (`enabled` in meta `sync`, default false). A sincronizzazione spenta niente pallini "da sincronizzare" e la pillola dice "Sul telefono".
   - Aggiunti lo strato Sentieri (tile.waymarkedtrails.org, pane `trailPane` z 350, preferenza `trails`) e la ricerca (luoghi Nominatim limitati all'Italia, coordinate, note dei punti). Service worker v5.
   - Testato nel browser a misura di telefono e sul Pixel 8a.
   - Slider strati: era 0,2–1, partiva da 0,7 a prescindere ed era ignorato dalle foto in modalità tendina. Ora 0–100% dal valore reale, vale anche nel confronto, e mentre si trascina il pannello diventa trasparente (classe `body.peek`).

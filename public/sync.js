@@ -2,7 +2,8 @@
 // Appena c'è rete, i punti in attesa vengono inviati al server (vince la modifica più recente).
 import { db } from './db.js';
 
-const DEFAULT_CONFIG = { url: 'api', token: '' };
+// Spenta di base: i punti restano solo sul telefono finché non la si accende nelle impostazioni
+const DEFAULT_CONFIG = { enabled: false, url: 'api', token: '' };
 const listeners = new Set();
 let syncing = false;
 let lastError = null;
@@ -14,7 +15,7 @@ export async function getSyncConfig() {
 }
 
 export async function setSyncConfig(cfg) {
-  await db.setMeta('sync', { url: (cfg.url || '').trim(), token: (cfg.token || '').trim() });
+  await db.setMeta('sync', { enabled: !!cfg.enabled, url: (cfg.url || '').trim(), token: (cfg.token || '').trim() });
   await db.setMeta('cursor', 0); // nuovo server: riscarica tutto
   lastError = null;
 }
@@ -29,7 +30,7 @@ export async function refreshStatus() {
   const lastSync = await db.getMeta('lastSync');
   let state;
   if (syncing) state = 'syncing';
-  else if (!cfg.url) state = 'local';
+  else if (!cfg.enabled || !cfg.url) state = 'local';
   else if (!navigator.onLine) state = 'offline';
   else if (lastError) state = 'error';
   else state = pending ? 'pending' : 'ok';
@@ -43,7 +44,7 @@ const strip = ({ synced, onServer, ...rest }) => rest;
 export async function syncNow() {
   if (syncing) return;
   const cfg = await getSyncConfig();
-  if (!cfg.url || !navigator.onLine) return refreshStatus();
+  if (!cfg.enabled || !cfg.url || !navigator.onLine) return refreshStatus();
 
   syncing = true;
   await refreshStatus();
