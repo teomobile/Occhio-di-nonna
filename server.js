@@ -121,7 +121,6 @@ async function handleApi(req, res, url) {
 }
 
 /* ---------- Strati dai geoportali (proxy con elenco chiuso di sorgenti) ---------- */
-const PCN = 'http://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/raster/ortofoto_bn_88.map';
 const TOSCANA_OFC = 'https://www502.regione.toscana.it/wmsraster/com.rt.wms.RTmap/wms?map=wmsofc';
 const TOSCANA_UCS = 'https://www502.regione.toscana.it/wmsraster/com.rt.wms.RTmap/wms?map=wmsucs';
 const LOMB ='https://www.cartografia.servizirl.it/arcgis2/rest/services';
@@ -143,7 +142,6 @@ const LITO_SLD = '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.openg
   + '</FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>';
 
 const OVERLAYS = {
-  'it-1988': { type: 'wms', url: PCN, layers: 'OI.ORTOIMMAGINI.1988.32,OI.ORTOIMMAGINI.1988.33', format: 'image/jpeg' },
   'tos-1954': { type: 'wms', url: TOSCANA_OFC, layers: 'rt_ofc.10k54', format: 'image/png' },
   // boschi del 2019 colorati secondo l'uso del suolo nel 1954 (arancione = era agricolo)
   'tos-boschi-ex-campi': { type: 'wms', url: TOSCANA_UCS, layers: 'rt_ucs.iducs.10k.2019-1954.rt', format: 'image/png' },

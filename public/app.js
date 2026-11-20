@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { syncNow, onSyncStatus, getSyncConfig, setSyncConfig, refreshStatus } from './sync.js';
 import { TYPES, DARK_TYPES, CALENDARS, typeById, inSeason, seasonLabel, monthActive, MONTH_INITIALS, calendarKey, zoneLabel, periodsFor } from './seasons.js';
-import { BASEMAPS, OVERLAYS, OVERLAY_MIN_ZOOM, OVERLAY_MAX_NATIVE, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
+import { BASEMAPS, TRAILS, OVERLAYS, OVERLAY_MIN_ZOOM, OVERLAY_MAX_NATIVE, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
 import { loadZones, zoneAt } from './zones.js';
 
 /* ================= Utilità ================= */
@@ -36,6 +36,8 @@ const ICONS = {
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   locate: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>',
   menu: '<path d="M12 3v11m0 0-4-4m4 4 4-4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/>',
+  trail: '<path d="M5 21c2-4 6-3 7-7s-3-5-1-9"/><path d="M15 21c1-2 3-3 4-5" stroke-dasharray="2 3"/><circle cx="11" cy="4" r="1.5"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
 };
@@ -43,6 +45,8 @@ const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
 $('#btnLayers').innerHTML = icon('layers');
 $('#btnLocate').innerHTML = icon('locate');
+$('#btnSearch').innerHTML = icon('search');
+$('#btnTrails').innerHTML = icon('trail');
 $('#btnMenu').innerHTML = icon('menu');
 
 let toastTimer;
@@ -176,7 +180,7 @@ function setOverlay(id, on) {
   const o = OVERLAYS.find(x => x.id === id);
   if (on) {
     overlayLayer(o).addTo(map);
-    if (compare.on && isPhoto(o)) overlayLayers[id].setOpacity(1);
+    if (compare.on && isPhoto(o)) overlayLayers[id].setOpacity(overlayOpacity() ?? 1);
     if (!activeOverlays.includes(id)) activeOverlays.push(id);
   }
   else { if (overlayLayers[id]) map.removeLayer(overlayLayers[id]); activeOverlays = activeOverlays.filter(x => x !== id); }
@@ -184,6 +188,25 @@ function setOverlay(id, on) {
   $('#btnLayers').classList.toggle('active', activeOverlays.length > 0);
 }
 activeOverlays.forEach(id => setOverlay(id, true));
+
+/* ----- Sentieri: strato trasparente sopra tutto (tranne i punti), si accende e spegne col pulsante ----- */
+map.createPane('trailPane').style.zIndex = 350;
+const trailLayer = L.tileLayer(TRAILS.url, {
+  pane: 'trailPane', maxZoom: 20, maxNativeZoom: TRAILS.maxNativeZoom, attribution: TRAILS.attribution, crossOrigin: true,
+});
+let trailsOn = false;
+function setTrails(on) {
+  trailsOn = on;
+  if (on) trailLayer.addTo(map); else map.removeLayer(trailLayer);
+  pref.set('trails', on);
+  $('#btnTrails').classList.toggle('active', on);
+  $('#btnTrails').setAttribute('aria-pressed', on);
+}
+setTrails(pref.get('trails', false));
+$('#btnTrails').addEventListener('click', () => {
+  setTrails(!trailsOn);
+  toast(trailsOn ? (map.getZoom() < 11 ? 'Sentieri accesi: avvicinati per vederli bene' : 'Sentieri accesi') : 'Sentieri spenti');
+});
 
 const GROUP_HINTS = {
   'Foto aeree storiche': 'Confronta con il satellite di oggi: i boschi nati su vecchi campi e pascoli si riconoscono bene.',
@@ -198,15 +221,19 @@ const minZoomOf = id => overlayById(id)?.minZoom || OVERLAY_MIN_ZOOM;
 
 function photoOverlayForZone() {
   const r = state.zone && zoneLabel(state.zone);
-  return OVERLAYS.find(o => isPhoto(o) && o.region === r) || OVERLAYS.find(o => o.id === 'it-1988');
+  return OVERLAYS.find(o => isPhoto(o) && o.region === r); // foto storiche solo per alcune Regioni
 }
 function setCompare(on) {
+  if (on && !OVERLAYS.some(o => isPhoto(o) && activeOverlays.includes(o.id))) {
+    const photo = photoOverlayForZone();
+    if (!photo) { toast('Foto storiche disponibili solo per Lombardia e Toscana: accendine una dagli strati'); return false; }
+    setOverlay(photo.id, true);
+  }
   compare.on = on;
   if (on) {
-    if (!OVERLAYS.some(o => isPhoto(o) && activeOverlays.includes(o.id))) setOverlay(photoOverlayForZone().id, true);
     if (!compare.el) buildDivider();
     compare.el.hidden = false;
-    OVERLAYS.filter(isPhoto).forEach(o => overlayLayers[o.id]?.setOpacity(1)); // nel confronto le foto sono piene
+    OVERLAYS.filter(isPhoto).forEach(o => overlayLayers[o.id]?.setOpacity(overlayOpacity() ?? 1)); // nel confronto le foto partono piene
     updateClip();
   } else {
     if (compare.el) compare.el.hidden = true;
@@ -266,12 +293,20 @@ async function legendHtml(id) {
 function openLayers() {
   const regionOf = state.zone && zoneLabel(state.zone);
   const groups = [...new Set(OVERLAYS.map(o => o.group))];
-  const op = overlayOpacity();
+  // valore reale: quello scelto, altrimenti quello del primo strato acceso (le foto partono piene)
+  const opNow = overlayOpacity() ?? (activeOverlays.length ? overlayById(activeOverlays[0]).opacity : 0.7);
   openSheet(`
     <div class="sheet-head"><h2>Mappe e strati</h2>${closeBtn}</div>
     <h3>Mappa di base</h3>
     <div class="filters" id="lyBase">${Object.entries(BASEMAPS).map(([id, b]) =>
       `<button type="button" data-base="${id}" aria-pressed="${id === currentLayerId}">${b.name}</button>`).join('')}</div>
+    <label class="overlay-item"><input type="checkbox" id="lyTrails" ${trailsOn ? 'checked' : ''}>
+      <span><b>Sentieri segnati</b><br><span class="muted">CAI e altri sentieri da OpenStreetMap. Si accende e spegne anche dal pulsante a lato della mappa.</span></span></label>
+    <div class="opacity-row">
+      <label for="lyOpacity">Visibilità degli strati: <b id="lyOpVal">${Math.round(opNow * 100)}%</b></label>
+      <input id="lyOpacity" type="range" min="0" max="1" step="0.05" value="${opNow}">
+      <p class="muted">0% = vedi solo la mappa di base, 100% = strato pieno. Mentre trascini il pannello si fa trasparente per mostrarti la mappa.</p>
+    </div>
     ${groups.map(g => `<h3>${g}</h3>
       ${GROUP_HINTS[g] ? `<p class="muted">${GROUP_HINTS[g]}</p>` : ''}
       ${g.startsWith('Foto') ? `<label class="overlay-item compare-toggle"><input type="checkbox" id="lyCompare" ${compare.on ? 'checked' : ''}>
@@ -284,7 +319,6 @@ function openLayers() {
             ${o.hint ? `<br><span class="muted">${esc(o.hint)}</span>` : ''}</span></label>
           ${o.legend || o.legendItems ? `<div class="legend" id="lg-${o.id}" ${activeOverlays.includes(o.id) ? '' : 'hidden'}></div>` : ''}
         </li>`).join('')}</ul>`).join('')}
-    <label>Trasparenza strati<input id="lyOpacity" type="range" min="0.2" max="1" step="0.1" value="${op ?? 0.7}"></label>
     <p class="muted">Gli strati si vedono da zoom ${OVERLAY_MIN_ZOOM} in su e servono la rete (o una zona scaricata per l'uso offline). Alcuni geoportali possono essere lenti.</p>`);
 
   if (activeOverlays.some(id => map.getZoom() < minZoomOf(id))) toast('Avvicinati con lo zoom per vedere gli strati');
@@ -305,16 +339,25 @@ function openLayers() {
     if (lg) { lg.hidden = !cb.checked; if (cb.checked) fillLegend(cb.dataset.ov); }
     if (cb.checked && map.getZoom() < minZoomOf(cb.dataset.ov)) toast(`Avvicinati con lo zoom (almeno ${minZoomOf(cb.dataset.ov)}) per vedere lo strato`);
   }));
-  $('#lyOpacity').addEventListener('input', e => {
+  $('#lyTrails').addEventListener('change', e => setTrails(e.target.checked));
+  const opInput = $('#lyOpacity');
+  opInput.addEventListener('input', e => {
     const v = Number(e.target.value);
     pref.set('overlayOpacity', v);
-    OVERLAYS.forEach(o => { if (overlayLayers[o.id] && !(compare.on && isPhoto(o))) overlayLayers[o.id].setOpacity(v); });
+    $('#lyOpVal').textContent = `${Math.round(v * 100)}%`;
+    OVERLAYS.forEach(o => overlayLayers[o.id]?.setOpacity(v));
+    if (!activeOverlays.length) toast('Nessuno strato acceso: scegline uno qui sotto');
   });
+  // anteprima dal vivo: mentre trascini resta visibile solo lo slider e si vede la mappa
+  const peek = on => document.body.classList.toggle('peek', on);
+  opInput.addEventListener('pointerdown', () => peek(true));
+  ['pointerup', 'pointercancel', 'change', 'blur'].forEach(ev => opInput.addEventListener(ev, () => peek(false)));
   $('#lyCompare').addEventListener('change', e => {
-    setCompare(e.target.checked);
+    if (setCompare(e.target.checked) === false) { e.target.checked = false; return; }
     if (e.target.checked) {
       closeSheet();
-      if (map.getZoom() < OVERLAY_MIN_ZOOM) toast('Avvicinati con lo zoom per vedere le foto storiche');
+      const photo = OVERLAYS.find(o => isPhoto(o) && activeOverlays.includes(o.id));
+      if (photo && map.getZoom() < minZoomOf(photo.id)) toast(`Avvicinati con lo zoom (almeno ${minZoomOf(photo.id)}) per vedere le foto storiche`);
       else toast('Trascina la barra per confrontare');
     }
   });
@@ -695,6 +738,82 @@ function renderList() {
 }
 $('#btnList').addEventListener('click', openList);
 
+/* ================= Ricerca: luoghi, coordinate, i miei punti ================= */
+let searchMarker = null;
+let lastSearch = '';
+// "45.12, 9.34" oppure "45,12 9,34" (virgola decimale all'italiana)
+function parseCoords(q) {
+  const m = q.trim().match(/^(-?\d{1,2}(?:[.,]\d+)?)[\s,;]+(-?\d{1,3}(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  const [lat, lng] = [m[1], m[2]].map(v => Number(v.replace(',', '.')));
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+function showSearchResult(lat, lng, label, zoom = 15) {
+  closeSheet();
+  if (searchMarker) map.removeLayer(searchMarker);
+  searchMarker = L.circleMarker([lat, lng], { radius: 11, color: '#4fa3e0', weight: 3, fillOpacity: 0.15 })
+    .addTo(map).bindTooltip(label, { direction: 'top', offset: [0, -10] }).openTooltip();
+  searchMarker.on('click', () => { map.removeLayer(searchMarker); searchMarker = null; });
+  map.setView([lat, lng], zoom);
+}
+async function runSearch(q) {
+  lastSearch = q;
+  const out = $('#qResults');
+  const rows = [];
+  const c = parseCoords(q);
+  if (c) rows.push(`<li><button class="find-item" type="button" data-lat="${c.lat}" data-lng="${c.lng}" data-label="${esc(q)}" data-z="17">
+    <i class="swatch" style="--c:#4fa3e0"></i><span><span class="t">Coordinate</span><br><span class="s">${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span></span><span class="d"></span></button></li>`);
+  const ql = q.toLowerCase();
+  const mine = state.finds.filter(f => [f.notes, f.dog, typeById(f.type).name].join(' ').toLowerCase().includes(ql)).slice(0, 8);
+  rows.push(...mine.map(f => `<li><button class="find-item" type="button" data-id="${f.id}">
+    <i class="swatch" style="--c:${typeById(f.type).color}"></i>
+    <span><span class="t">${esc(typeById(f.type).name)}</span><br><span class="s">${esc([f.dog, f.notes].filter(Boolean).join(' · ')) || 'punto salvato'}</span></span>
+    <span class="d">${fmtDay(f.createdAt)}</span></button></li>`));
+  out.innerHTML = rows.join('') + (navigator.onLine ? '<li class="empty">Cerco i luoghi…</li>' : '<li class="empty">Senza rete cerco solo coordinate e i tuoi punti.</li>');
+  if (!navigator.onLine || c) { if (c) out.lastElementChild.remove(); return; }
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=it&accept-language=it&q=${encodeURIComponent(q)}`;
+    const places = await fetch(url).then(r => (r.ok ? r.json() : []));
+    if (lastSearch !== q) return; // nel frattempo è partita un'altra ricerca
+    out.lastElementChild.remove();
+    out.insertAdjacentHTML('beforeend', places.map(p => {
+      const parts = p.display_name.split(', ');
+      const z = p.type === 'peak' || p.addresstype === 'hamlet' || p.addresstype === 'village' ? 15 : p.addresstype === 'city' || p.addresstype === 'town' ? 13 : 14;
+      return `<li><button class="find-item" type="button" data-lat="${p.lat}" data-lng="${p.lon}" data-label="${esc(parts[0])}" data-z="${z}">
+        <i class="swatch" style="--c:#8a8170"></i><span><span class="t">${esc(parts[0])}</span><br><span class="s">${esc(parts.slice(1, 4).join(', '))}</span></span><span class="d"></span></button></li>`;
+    }).join('') || (rows.length ? '' : '<li class="empty">Nessun luogo trovato.</li>'));
+  } catch {
+    if (lastSearch === q) out.lastElementChild.outerHTML = '<li class="empty">Ricerca dei luoghi non riuscita: riprova.</li>';
+  }
+}
+function openSearch() {
+  openSheet(`
+    <div class="sheet-head"><h2>Cerca</h2>${closeBtn}</div>
+    <form id="qForm" class="search-form" role="search">
+      <input id="qInput" type="search" enterkeyhint="search" autocomplete="off" placeholder="Paese, monte, coordinate o nota" value="${esc(lastSearch)}">
+      <button class="btn btn-primary" type="submit">Cerca</button>
+    </form>
+    <p class="muted">Luoghi da OpenStreetMap (serve la rete). Coordinate come 44.70, 8.03. Cerca anche tra le note dei tuoi punti.</p>
+    <ul id="qResults" class="find-list"></ul>`);
+  const input = $('#qInput');
+  setTimeout(() => input.focus(), 150);
+  $('#qForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (q.length >= 2) { input.blur(); runSearch(q); }
+  });
+  $('#qResults').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.id) {
+      const f = state.finds.find(x => x.id === b.dataset.id);
+      map.setView([f.lat, f.lng], Math.max(map.getZoom(), 16));
+      openDetail(f.id);
+    } else showSearchResult(Number(b.dataset.lat), Number(b.dataset.lng), b.dataset.label, Number(b.dataset.z));
+  });
+}
+$('#btnSearch').addEventListener('click', openSearch);
+
 /* ================= Calendario ================= */
 function renderSeasonChip() {
   const ctx = seasonCtx();
@@ -851,6 +970,8 @@ async function openMenu() {
     </div>
     ${activeOverlays.length ? `<label class="overlay-item" style="margin-top:12px"><input type="checkbox" id="oOverlays" checked>
       <span>Scarica anche gli strati attivi (${activeOverlays.length})</span></label>` : ''}
+    <label class="overlay-item"><input type="checkbox" id="oTrails" ${trailsOn ? 'checked' : ''}>
+      <span>Scarica anche i sentieri</span></label>
     <p id="oEstimate" class="muted"></p>
     <div class="progress" id="oProg" hidden><div></div></div>
     <div class="btn-row">
@@ -890,6 +1011,7 @@ async function openMenu() {
         }
       }
     }
+    if ($('#oTrails')?.checked) urls.push(...tileUrls(TRAILS, map.getBounds(), Math.max(1, z - 2), zMax));
     const tooMany = urls.length > MAX_TILES;
     $('#oEstimate').innerHTML = tooMany
       ? '<span style="color:var(--danger)">Zona troppo grande: avvicinati con lo zoom o scegli meno dettaglio.</span>'
@@ -900,6 +1022,7 @@ async function openMenu() {
   const showCached = async () => { $('#oCached').textContent = `Tessere salvate sul telefono: ${await cachedTileCount()}`; };
   $('#oLayer').addEventListener('change', estimate);
   $('#oOverlays')?.addEventListener('change', estimate);
+  $('#oTrails').addEventListener('change', estimate);
   $('#oDepth').addEventListener('change', estimate);
   estimate();
   showCached();

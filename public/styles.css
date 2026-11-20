@@ -283,3 +283,16 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Ricerca ---------- */
+.search-form { display: flex; gap: 8px; align-items: stretch; }
+.search-form input { flex: 1; min-width: 0; }
+.search-form .btn { flex: 0 0 auto; }
+
+/* ---------- Slider visibilità strati con anteprima ---------- */
+.opacity-row { margin: 10px 0 4px; }
+.opacity-row label { display: block; }
+body.peek .backdrop { background: transparent; }
+body.peek .sheet { background: transparent; box-shadow: none; border-color: transparent; }
+body.peek .sheet-grip, body.peek .sheet-body > :not(.opacity-row), body.peek .opacity-row p { visibility: hidden; }
+body.peek .opacity-row { background: rgba(38, 34, 28, .94); border-radius: 12px; padding: 8px 12px; }

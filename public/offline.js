@@ -26,10 +26,18 @@ export const BASEMAPS = {
   },
 };
 
+// Sentieri segnati (CAI e altri) da OpenStreetMap: immagine trasparente da sovrapporre a qualsiasi mappa
+export const TRAILS = {
+  name: 'Sentieri',
+  url: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
+  maxNativeZoom: 18,
+  kbPerTile: 6,
+  attribution: 'Sentieri © waymarkedtrails.org, OpenStreetMap (CC-BY-SA)',
+};
+
 // Strati sopra la mappa. Passano dal server dell'app (/ov/...), che li prende dai geoportali ufficiali:
 // così funzionano anche in HTTPS e possono essere salvati per l'uso offline.
 export const OVERLAYS = [
-  { id: 'it-1988',      group: 'Foto aeree storiche', name: 'Italia 1988 (b/n)', region: null,        opacity: 1,   source: 'Geoportale Nazionale – MASE' },
   { id: 'tos-1954',     group: 'Foto aeree storiche', name: 'Toscana 1954',       region: 'Toscana',   opacity: 1,   source: 'Regione Toscana – Geoscopio' },
   { id: 'lom-1954',     group: 'Foto aeree storiche', name: 'Lombardia 1954 (volo GAI)', region: 'Lombardia', opacity: 1, source: 'Regione Lombardia – Geoportale' },
   { id: 'tos-boschi-ex-campi', group: 'Vecchi campi', name: 'Toscana – boschi nati su ex campi (1954→2019)', region: 'Toscana', opacity: 0.7, legend: true,

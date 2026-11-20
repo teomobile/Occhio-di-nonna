@@ -29,8 +29,10 @@ Webapp PWA per Android: segni sulla mappa dove trovi i tartufi, li salvi con dat
 | "Vecchi campi" calcolati: Lombardia 1980→2015, Italia Corine 1990→2018 | ✅ fatto, testato | `IntersectLayer` in app.js incrocia due carte pixel per pixel nel browser |
 | Suolo e geologia: rocce calcaree/marnose (ISPRA), pH (SoilGrids) | ✅ fatto, testato | pH lento (15–20 s/tessera), con un nuovo tentativo automatico |
 | Backup GPX / JSON, import | ✅ fatto | Import non testato a fondo |
+| Sentieri (Waymarked Trails) on/off | ✅ fatto, testato nel browser | Pulsante a lato + casella in Strati; inclusi nel download offline |
+| Ricerca luoghi / coordinate / punti | ✅ fatto, testato nel browser | Nominatim solo all'invio (niente autocompletamento, come chiede la loro policy) |
 | Prova su telefono Android reale | ❌ da fare | Serve HTTPS |
-| Messa online (hosting HTTPS) | ❌ da fare | |
+| Messa online (hosting HTTPS) | 🟡 provvisoria | Tunnel localhost.run dal PC: l'indirizzo cambia e cade se il PC si spegne. Hosting fisso da scegliere |
 | Repository git | ✅ su GitHub | `main` pubblicato su teomobile/Occhio-di-nonna |
 
 ## 3. Come si avvia
@@ -43,6 +45,13 @@ npm start
 - Token facoltativo per la sincronizzazione: `$env:SYNC_TOKEN="frase-lunga"`, da inserire uguale nell'app (Impostazioni → Sincronizzazione).
 - Nessuna dipendenza npm: serve solo Node ≥ 18 (testato con Node 22).
 - Sul telefono GPS, bussola e service worker funzionano **solo in HTTPS** (o su localhost).
+- **Messa online provvisoria** (senza installare nulla): il token sta in `.env` (gitignored).
+  ```bash
+  export $(cat .env) && PORT=8090 node server.js      # 8080 sul PC di Matteo è occupata da Windows (PID 4)
+  ssh -o StrictHostKeyChecking=accept-new -R 80:localhost:8090 nokey@localhost.run
+  ```
+  Il secondo comando stampa un indirizzo `https://….lhr.life`. Cambia a ogni avvio (e periodicamente): l'app installata con un indirizzo vecchio non si aggiorna più e i dati locali restano legati a quell'indirizzo, quindi esporta un backup prima di cambiarlo.
+- Telefono via USB: `%LOCALAPPDATA%AndroidSdkplatform-toolsadb.exe` (serve il Debug USB attivo sul telefono).
 
 ## 4. Architettura
 
@@ -110,7 +119,6 @@ public/
 
 | id | Servizio | Note |
 |---|---|---|
-| it-1988 | WMS PCN/MASE `ortofoto_bn_88` | Solo HTTP, a volte non risponde (il server riprova una volta) |
 | tos-1954 | WMS Regione Toscana `wmsofc`, layer `rt_ofc.10k54` | |
 | tos-boschi-ex-campi | WMS Regione Toscana `wmsucs`, layer `rt_ucs.iducs.10k.2019-1954.rt` | Boschi 2019 colorati per uso del suolo 1954 |
 | lom-1954 | ArcGIS REST `BaseMap/Lombardia_GAI_UTM32N` (export) | |
@@ -175,6 +183,15 @@ Strati calcolati nell'app (`intersect` in `offline.js`): `lom-ex-campi` (lom-agr
   - Nuovo gruppo "Suolo e geologia": rocce calcaree e marnose (ISPRA) e pH del suolo (SoilGrids).
   - Calendari aggiunti per 12 Regioni (9 da testi ufficiali, 3 da verificare); supporto alle date "ultima domenica del mese".
   - Testato nel browser a misura di telefono (Bergamo, Perugia).
+- **20/11/2026 – sessione 3 (continua)**
+  - Aggiunti lo strato Sentieri (tile.waymarkedtrails.org, pane `trailPane` z 350, preferenza `trails`) e la ricerca (luoghi Nominatim limitati all'Italia, coordinate, note dei punti). Service worker v5.
+  - Testato nel browser a misura di telefono e sul Pixel 8a.
+  - Slider strati: era 0,2–1, partiva da 0,7 a prescindere ed era ignorato dalle foto in modalità tendina. Ora 0–100% dal valore reale, vale anche nel confronto, e mentre si trascina il pannello diventa trasparente (classe `body.peek`).
+  - Italia 1988 (PCN) **rimosso su richiesta**. Motivi: a zoom ≤ 12 il WMS restituisce un JPEG tutto bianco (velo bianco sulla mappa) → `minZoom: 13`. In alcune zone (es. sopra il Garda, 45.89 N 10.93 E) il PCN risponde con un errore `msShapefileOpen(): Unable to access file` per alcune tessere: buco lato loro, quelle tessere restano vuote.
+  - Debug sul telefono: `adb forward tcp:9222 localabstract:chrome_devtools_remote` e poi Runtime.evaluate via WebSocket (script di prova nella scratchpad, non nel repo).
+- **19/11/2026 – sessione 3**
+  - App online in HTTPS provvisoria: server sulla porta 8090 con token obbligatorio (`.env`) e tunnel localhost.run. Verificato che risponde e che `/api/sync` senza token dà 401.
+  - Tunnel localhost.run troppo lento (limite banda gratuita). App installata sul Pixel 8a via USB: `adb reverse tcp:8090 tcp:8090` e Chrome su `http://localhost:8090` (contesto sicuro), poi Installa. Token inserito. Il reverse si perde a ogni scollegamento del cavo.
 
 ---
 
