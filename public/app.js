@@ -3,9 +3,13 @@ import { syncNow, onSyncStatus, getSyncConfig, setSyncConfig, refreshStatus } fr
 import { TYPES, DARK_TYPES, CALENDARS, typeById, inSeason, seasonLabel, monthActive, MONTH_INITIALS, calendarKey, zoneLabel, periodsFor } from './seasons.js';
 import { BASEMAPS, TRAILS, OVERLAYS, OVERLAY_MIN_ZOOM, overlayMaxNative, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
 import { loadZones, zoneAt } from './zones.js';
+import { isNative, nativeTileLayerClass, tileBlob, shareFile } from './native.js';
 
 /* ================= Utilità ================= */
 const $ = sel => document.querySelector(sel);
+// Nell'app Android le tessere passano da tileBlob (cache + rete), sul web dal service worker
+const NativeTileLayer = isNative ? nativeTileLayerClass(L) : null;
+const tileLayer = (url, opts) => (isNative ? new NativeTileLayer(url, opts) : L.tileLayer(url, opts));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 const fmtDateTime = iso => new Date(iso).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -93,7 +97,7 @@ let currentLayerId = pref.get('layer', 'sat');
 if (!BASEMAPS[currentLayerId]) currentLayerId = 'sat';
 const baseLayers = {};
 for (const [id, b] of Object.entries(BASEMAPS)) {
-  baseLayers[id] = L.tileLayer(b.url, { maxZoom: 20, maxNativeZoom: b.maxNativeZoom, attribution: b.attribution, crossOrigin: true });
+  baseLayers[id] = tileLayer(b.url, { maxZoom: 20, maxNativeZoom: b.maxNativeZoom, attribution: b.attribution, crossOrigin: true });
 }
 baseLayers[currentLayerId].addTo(map);
 
@@ -128,9 +132,11 @@ const IntersectLayer = L.GridLayer.extend({
     const { spec, color } = this.options;
     const load = id => new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
+      img.onload = () => { resolve(img); if (isNative) setTimeout(() => URL.revokeObjectURL(img.src), 5000); };
       img.onerror = reject;
-      img.src = `ov/${id}/${coords.z}/${coords.x}/${coords.y}`;
+      const src = `ov/${id}/${coords.z}/${coords.x}/${coords.y}`;
+      if (isNative) tileBlob(src).then(b => { img.src = URL.createObjectURL(b); }).catch(reject);
+      else img.src = src;
     });
     const pixels = img => {
       const c = document.createElement('canvas');
@@ -167,10 +173,10 @@ function overlayLayer(o) {
     };
     overlayLayers[o.id] = o.intersect
       ? new IntersectLayer({ ...opts, spec: o.intersect, color: o.color })
-      : L.tileLayer(overlayUrl(o.id), opts);
+      : tileLayer(overlayUrl(o.id), opts);
     // i geoportali lenti (es. SoilGrids) a volte non rispondono in tempo: riprovo una volta
     overlayLayers[o.id].on('tileerror', ({ tile }) => {
-      if (tile.tagName !== 'IMG' || tile.dataset.retry) return;
+      if (isNative || tile.tagName !== 'IMG' || tile.dataset.retry) return; // nell'app Android il secondo tentativo lo fa già native.js
       tile.dataset.retry = '1';
       setTimeout(() => { tile.src = `${tile.src}${tile.src.includes('?') ? '&' : '?'}retry=1`; }, 2000);
     });
@@ -192,7 +198,7 @@ activeOverlays.forEach(id => setOverlay(id, true));
 
 /* ----- Sentieri: strato trasparente sopra tutto (tranne i punti), si accende e spegne col pulsante ----- */
 map.createPane('trailPane').style.zIndex = 350;
-const trailLayer = L.tileLayer(TRAILS.url, {
+const trailLayer = tileLayer(TRAILS.url, {
   pane: 'trailPane', maxZoom: 20, maxNativeZoom: TRAILS.maxNativeZoom, attribution: TRAILS.attribution, crossOrigin: true,
 });
 let trailsOn = false;
@@ -1090,6 +1096,7 @@ $('#btnMenu').addEventListener('click', openMenu);
 
 /* ================= Backup ================= */
 function download(name, content, type) {
+  if (isNative) { shareFile(name, content, type).catch(e => toast(`Esportazione non riuscita: ${e.message || e}`)); return; }
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.append(a);
@@ -1203,8 +1210,6 @@ setInterval(() => { if (navigator.onLine) syncNow().then(r => r?.changed && load
   startGps();
   await refreshStatus();
   syncNow().then(r => r?.changed && loadFinds());
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-    navigator.storage?.persist?.().catch(() => {}); // evita che Android cancelli dati e mappe
-  }
+  if ('serviceWorker' in navigator && !isNative) navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.storage?.persist?.().catch(() => {}); // evita che Android cancelli dati e mappe
 })();

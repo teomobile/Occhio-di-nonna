@@ -13,7 +13,7 @@ Webapp PWA per Android: segni sulla mappa dove trovi i tartufi, li salvi con dat
 
 ## 2. Stato attuale
 
-**Ultimo aggiornamento:** 19/11/2026
+**Ultimo aggiornamento:** 23/11/2026
 
 | Area | Stato | Note |
 |---|---|---|
@@ -31,7 +31,9 @@ Webapp PWA per Android: segni sulla mappa dove trovi i tartufi, li salvi con dat
 | Backup GPX / JSON, import | ✅ fatto | Import non testato a fondo |
 | Sentieri (Waymarked Trails) on/off | ✅ fatto, testato nel browser | Pulsante a lato + casella in Strati; inclusi nel download offline |
 | Ricerca luoghi / coordinate / punti | ✅ fatto, testato nel browser | Nominatim solo all'invio (niente autocompletamento, come chiede la loro policy) |
-| Prova su telefono Android reale | ❌ da fare | Serve HTTPS |
+| Prova su telefono Android reale | ✅ Pixel 8a | PWA via USB (`adb reverse`) e APK |
+| **App Android (APK, Capacitor)** | ✅ fatto, testato sul Pixel | Funziona senza server: strati dai geoportali con HTTP nativo, tessere in cache da JS, backup via menu Condividi. APK in `dist/OcchioDiNonna.apk` (non nel repo) |
+| Strati offline Trentino (pH, Corine, litologia) | ✅ scaricati sul Pixel (PWA) | 5.949 tessere, ~50 MB. Script in `tools/` |
 | Messa online (hosting HTTPS) | 🟡 provvisoria | Tunnel localhost.run dal PC: l'indirizzo cambia e cade se il PC si spegne. Hosting fisso da scegliere |
 | Repository git | ✅ su GitHub | `main` pubblicato su teomobile/Occhio-di-nonna |
 
@@ -51,6 +53,15 @@ npm start
   ssh -o StrictHostKeyChecking=accept-new -R 80:localhost:8090 nokey@localhost.run
   ```
   Il secondo comando stampa un indirizzo `https://….lhr.life`. Cambia a ogni avvio (e periodicamente): l'app installata con un indirizzo vecchio non si aggiorna più e i dati locali restano legati a quell'indirizzo, quindi esporta un backup prima di cambiarlo.
+- **APK Android** (Capacitor 8, progetto in `android/`, id `it.occhiodinonna.app`):
+  ```bash
+  export JAVA_HOME="$HOME/.jdks/jdk-21.0.12.1+1"   # serve JDK 21: il JBR di Android Studio è JDK 25, troppo nuovo per Gradle 8.14
+  npx cap sync android && cd android && ./gradlew assembleDebug
+  cp app/build/outputs/apk/debug/app-debug.apk ../dist/OcchioDiNonna.apk
+  ```
+  `android/local.properties` (gitignored) contiene `sdk.dir=C:/Users/Matteo/AppData/Local/Android/Sdk`. Icone rigenerate da `assets/` con `npx @capacitor/assets generate --android`.
+  L'APK è **firmato con la chiave di debug** di questo PC (`~/.android/debug.keystore`): un aggiornamento si installa sopra solo se firmato con la stessa chiave. Se lo si distribuisce davvero, creare una chiave di rilascio e conservarla.
+  Debug dell'APK sul telefono: `adb forward tcp:9223 localabstract:webview_devtools_remote_<pid>` e `node tools/cdpa.mjs "<js>"`.
 - Telefono via USB: `%LOCALAPPDATA%AndroidSdkplatform-toolsadb.exe` (serve il Debug USB attivo sul telefono).
 
 ## 4. Architettura
@@ -115,7 +126,7 @@ public/
 ⚠️ = `check: 'da verificare'` in `seasons.js`; l'app lo mostra con un avviso rosso.
 ⚠️ La Lombardia rinnova il calendario ogni anno entro il 31 marzo, la Basilicata e la Liguria cambiano spesso per decreto: vanno ricontrollate ogni stagione.
 
-### Strati (`server.js` → `OVERLAYS`)
+### Strati (`public/ovsources.js` → `OVERLAY_SOURCES`, usato dal server e dall'APK)
 
 | id | Servizio | Note |
 |---|---|---|
@@ -143,7 +154,8 @@ Strati calcolati nell'app (`intersect` in `offline.js`): `lom-ex-campi` (lom-agr
 ## 6. Decisioni prese
 
 - **Webapp/PWA prima dell'app nativa.** Un'eventuale app Android si può fare dopo con TWA (Bubblewrap) o Capacitor, riusando la webapp.
-- **Vanilla JS + Leaflet 1.9.4 da unpkg**, senza build step: si modifica e si ricarica.
+- **Vanilla JS + Leaflet 1.9.4**, senza build step: si modifica e si ricarica. Leaflet è copiato in `public/vendor/leaflet` (dal 23/11, prima era da unpkg) così l'app parte anche offline e dentro l'APK.
+- **App Android con Capacitor, non TWA**: la TWA richiede comunque un sito HTTPS; con Capacitor l'app è autonoma. `public/native.js` sostituisce ciò che fa il server: le richieste `ov/...` vanno ai geoportali via `CapacitorHttp` (sorgenti condivise con il server in `public/ovsources.js`), le tessere passano da `tileBlob` (cache poi rete) perché nell'APK il service worker non è usato.
 - **Salvataggio sempre prima in locale** (IndexedDB), sincronizzazione dopo. Si sincronizza all'evento `online`, al ritorno in primo piano, ogni 60 s e dopo ogni modifica.
 - **Strati via proxy del server**: risolve CORS, il contenuto misto HTTP/HTTPS e permette la cache offline. Il proxy ha un elenco chiuso di sorgenti (non è un proxy aperto).
 - **Le date di raccolta solo da fonti ufficiali verificate**, mai a memoria.
@@ -183,6 +195,11 @@ Strati calcolati nell'app (`intersect` in `offline.js`): `lom-ex-campi` (lom-agr
   - Nuovo gruppo "Suolo e geologia": rocce calcaree e marnose (ISPRA) e pH del suolo (SoilGrids).
   - Calendari aggiunti per 12 Regioni (9 da testi ufficiali, 3 da verificare); supporto alle date "ultima domenica del mese".
   - Testato nel browser a misura di telefono (Bergamo, Perugia).
+- **23/11/2026 – sessione 3 (APK)**
+  - Server del PC spento; liberata la porta 4200 (era un `ng serve` Angular).
+  - Creato l'APK con Capacitor 8 (`android/`, `capacitor.config.json`, icone da `assets/`). Leaflet portato in locale. Sorgenti degli strati spostate in `public/ovsources.js` (il server le importa). Service worker v12.
+  - Testato sul Pixel come app separata: mappa, sentieri, litologia e pH dai geoportali senza server, cache delle tessere, legenda, menu Condividi per il backup.
+  - Il server Corine dell'EEA (image.discomap.eea.europa.eu) il 23/11 non rispondeva né dal telefono né dal PC: problema loro, lo strato "campi diventati bosco" resta vuoto finché non torna (le tessere del Trentino già scaricate nella PWA restano).
 - **20/11/2026 – sessione 3 (strati offline)**
   - Il Pixel era rimasto alla v8 (avviato senza cavo, quindi il service worker non si aggiornava): forzato l'aggiornamento, l'interruttore della sincronizzazione c'è ed è spento.
   - Ogni strato ha ora un dettaglio massimo (`maxNative` in `offline.js`: foto 17, ex-campi Toscana/Lombardia 16, litologia 14, pH e Corine 13). Oltre quel dettaglio Leaflet ingrandisce le tessere già salvate: si scarica molto meno e offline lo strato resta visibile a ogni zoom. Service worker v10. **Non ancora committato.**

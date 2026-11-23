@@ -1,0 +1,8 @@
+{
+  "appId": "it.occhiodinonna.app",
+  "appName": "Occhio di nonna",
+  "webDir": "public",
+  "android": {
+    "backgroundColor": "#1b1814"
+  }
+}

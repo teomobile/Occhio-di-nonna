@@ -1,16 +1,14 @@
 // Service worker: app utilizzabile offline + tessere della mappa in cache.
-const VERSION = 'v10';
+const VERSION = 'v12';
 const APP_CACHE = `tartufi-app-${VERSION}`;
 const TILE_CACHE = 'tartufi-tiles'; // stesso nome usato in offline.js
 const TILE_HOSTS = ['server.arcgisonline.com', 'a.tile.opentopomap.org', 'tile.openstreetmap.org', 'tile.waymarkedtrails.org'];
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './db.js', './sync.js', './seasons.js', './offline.js', './zones.js', './province.json',
-  './manifest.webmanifest', './icon.svg',
+  './', './index.html', './styles.css', './app.js', './db.js', './sync.js', './seasons.js', './offline.js', './zones.js', './ovsources.js', './native.js', './province.json',
+  './manifest.webmanifest', './icon.svg', './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
+  './vendor/leaflet/images/layers.png', './vendor/leaflet/images/layers-2x.png', './vendor/leaflet/images/marker-icon.png',
 ];
-const CDN = [
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-];
+const CDN = []; // Leaflet ora è dentro l'app (vendor/leaflet)
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {

@@ -9,3 +9,6 @@ Thumbs.db
 
 # impostazioni locali di Claude Code
 .claude/settings.local.json
+
+# APK pronto da passare (si rigenera)
+dist/
