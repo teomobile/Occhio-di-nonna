@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { syncNow, onSyncStatus, getSyncConfig, setSyncConfig, refreshStatus } from './sync.js';
 import { TYPES, DARK_TYPES, CALENDARS, typeById, inSeason, seasonLabel, monthActive, MONTH_INITIALS, calendarKey, zoneLabel, periodsFor } from './seasons.js';
-import { BASEMAPS, TRAILS, OVERLAYS, OVERLAY_MIN_ZOOM, OVERLAY_MAX_NATIVE, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
+import { BASEMAPS, TRAILS, OVERLAYS, OVERLAY_MIN_ZOOM, overlayMaxNative, overlayUrl, overlayAsBasemap, overlaySources, MAX_TILES, tileUrls, downloadTiles, cachedTileCount, clearTiles } from './offline.js';
 import { loadZones, zoneAt } from './zones.js';
 
 /* ================= Utilità ================= */
@@ -161,7 +161,7 @@ const IntersectLayer = L.GridLayer.extend({
 function overlayLayer(o) {
   if (!overlayLayers[o.id]) {
     const opts = {
-      minZoom: o.minZoom || OVERLAY_MIN_ZOOM, maxZoom: 20, maxNativeZoom: OVERLAY_MAX_NATIVE,
+      minZoom: o.minZoom || OVERLAY_MIN_ZOOM, maxZoom: 20, maxNativeZoom: overlayMaxNative(o),
       opacity: overlayOpacity() ?? o.opacity, attribution: o.source,
       pane: isPhoto(o) ? 'photoPane' : 'zonePane',
     };
@@ -1012,7 +1012,7 @@ async function openMenu() {
     if ($('#oOverlays')?.checked) {
       for (const id of activeOverlays) {
         for (const src of overlaySources(overlayById(id))) { // gli strati calcolati richiedono due carte
-          urls.push(...tileUrls(overlayAsBasemap(src), map.getBounds(), Math.max(minZoomOf(id), z - 2), zMax));
+          urls.push(...tileUrls(overlayAsBasemap(src, overlayMaxNative(overlayById(id))), map.getBounds(), Math.max(minZoomOf(id), z - 2), zMax));
         }
       }
     }
